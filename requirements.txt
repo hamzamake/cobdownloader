@@ -1,0 +1,5 @@
+yt-dlp
+certifi
+
+# only needed to build the exe / installer (build.bat, make-installer.bat)
+# pyinstaller

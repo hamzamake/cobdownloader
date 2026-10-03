@@ -1,0 +1,7 @@
+# cmd.exe misparses goto labels in LF-only batch files, and GitHub's
+# "Download ZIP" would otherwise hand out LF copies.
+*.bat text eol=crlf
+*.iss text eol=crlf
+
+*.exe binary
+*.ico binary
