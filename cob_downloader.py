@@ -32,12 +32,17 @@ from pathlib import Path
 from tkinter import filedialog, font as tkfont, messagebox, ttk
 
 FROZEN  = getattr(sys, "frozen", False)
+MAC     = sys.platform == "darwin"
 APP_DIR = Path(__file__).resolve().parent
 # PyInstaller unpacks bundled data here; running from source it is just the
-# folder the script lives in
+# folder the script lives in.  Inside a macOS .app it is Contents/Frameworks
 BUNDLE  = Path(getattr(sys, "_MEIPASS", APP_DIR))
-APPDATA = Path(os.environ.get("APPDATA") or Path.home()) / "CobDownloader"
-# a frozen app may sit somewhere read-only, so settings go to AppData
+if MAC:
+    APPDATA = Path.home() / "Library" / "Application Support" / "CobDownloader"
+else:
+    APPDATA = Path(os.environ.get("APPDATA") or Path.home()) / "CobDownloader"
+# a frozen app may sit somewhere read-only (a mounted .dmg, or a translocated
+# .app on macOS), so settings go to AppData / Application Support
 SETTINGS_FILE = (APPDATA if FROZEN else APP_DIR) / "settings.json"
 # self-updated copies of yt-dlp and ffmpeg live here, always somewhere
 # writable, so the packaged build can update itself without being reinstalled
@@ -94,11 +99,26 @@ ACCENT_HI  = "#f05a5f"
 GREEN      = "#3dd68c"
 BLUE       = "#5b8cff"
 
-FONT       = ("Segoe UI", 10)
-FONT_B     = ("Segoe UI Semibold", 10)
-FONT_S     = ("Segoe UI", 9)
-FONT_TITLE = ("Segoe UI Semibold", 19)
-FONT_BTN   = ("Segoe UI Semibold", 11)
+if MAC:
+    # Segoe UI does not exist there, and Tk on macOS draws one point as one
+    # pixel (72 dpi) where Windows uses 96, so the same sizes come out a
+    # quarter smaller.  Not scaled all the way up: a 13" MacBook has ~200 px
+    # less height than a 1080p screen and this window is height-constrained
+    FONT       = ("Helvetica Neue", 12)
+    FONT_B     = ("Helvetica Neue", 12, "bold")
+    FONT_S     = ("Helvetica Neue", 11)
+    FONT_TITLE = ("Helvetica Neue", 23, "bold")
+    FONT_BTN   = ("Helvetica Neue", 13, "bold")
+    FONT_URL   = ("Helvetica Neue", 13)
+    FONT_MONO  = ("Menlo", 10)
+else:
+    FONT       = ("Segoe UI", 10)
+    FONT_B     = ("Segoe UI Semibold", 10)
+    FONT_S     = ("Segoe UI", 9)
+    FONT_TITLE = ("Segoe UI Semibold", 19)
+    FONT_BTN   = ("Segoe UI Semibold", 11)
+    FONT_URL   = ("Segoe UI", 11)
+    FONT_MONO  = ("Consolas", 9)
 
 VIDEO_TYPES = ["MP4", "MKV", "WEBM"]
 AUDIO_TYPES = ["MP3", "M4A", "OPUS", "FLAC", "WAV"]
@@ -109,7 +129,7 @@ AUDIO_QUALITY = ["Best", "320 kbps", "256 kbps", "192 kbps", "128 kbps", "96 kbp
 # YouTube increasingly wants a logged-in session; borrowing cookies fixes most
 # "HTTP Error 403" and "sign in to confirm you're not a bot" failures
 BROWSERS = ["None", "Chrome", "Edge", "Firefox", "Brave", "Opera", "Vivaldi",
-            "Chromium"]
+            "Chromium"] + (["Safari"] if MAC else [])
 
 
 class Cancelled(yt_dlp.utils.DownloadCancelled):
@@ -628,6 +648,10 @@ class App(tk.Tk):
 
         self.url.focus_set()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        if MAC:
+            # Cmd-Q otherwise exits outright, skipping the settings save and
+            # leaving a download half-written
+            self.createcommand("::tk::mac::Quit", self._on_close)
         self._pump_job = self.after(80, self._pump)
         # after the window is up, so a slow network never delays the UI
         self._upd_job = self.after(400, self._check_updates)
@@ -689,7 +713,7 @@ class App(tk.Tk):
         if not ffmpeg_dir():
             missing.append("ffmpeg (needed to merge & convert)")
         if not js_runtimes():
-            missing.append("a JS runtime (qjs.exe is missing from this build)")
+            missing.append(f"a JS runtime ({QJS_EXE} is missing from this build)")
         tk.Label(head, bg=BG, fg=ACCENT if missing else MUTED, font=FONT_S,
                  text="missing: " + ", ".join(missing) if missing
                  else "ffmpeg ready").pack(side="right", pady=(8, 0))
@@ -708,7 +732,7 @@ class App(tk.Tk):
         ebox = tk.Frame(row, bg=INPUT, highlightbackground=BORDER,
                         highlightthickness=1, bd=0)
         ebox.pack(side="left", fill="both", expand=True)
-        self.url = tk.Text(ebox, bg=INPUT, fg=TEXT, font=("Segoe UI", 11),
+        self.url = tk.Text(ebox, bg=INPUT, fg=TEXT, font=FONT_URL,
                            relief="flat", insertbackground=ACCENT, height=4,
                            highlightthickness=0, bd=0, wrap="none", padx=10, pady=7)
         self.url.pack(side="left", fill="both", expand=True)
@@ -716,8 +740,10 @@ class App(tk.Tk):
                             style="Dark.Vertical.TScrollbar")
         usb.pack(side="right", fill="y")
         self.url.configure(yscrollcommand=usb.set)
-        self.url.bind("<Control-a>", self._select_all_links)
-        self.url.bind("<Control-Return>", lambda e: (self.start(), "break")[1])
+        # Command on macOS; there Control-a is the Emacs-style line start
+        mod = "Command" if MAC else "Control"
+        self.url.bind(f"<{mod}-a>", self._select_all_links)
+        self.url.bind(f"<{mod}-Return>", lambda e: (self.start(), "break")[1])
 
         btns = tk.Frame(row, bg=CARD)
         btns.pack(side="left", padx=(10, 0))
@@ -865,7 +891,7 @@ class App(tk.Tk):
 
         lwrap = tk.Frame(c5, bg=CARD)
         lwrap.pack(fill="both", expand=True, padx=16, pady=(8, 14))
-        self.log = tk.Text(lwrap, bg=BG, fg=MUTED, font=("Consolas", 9), relief="flat",
+        self.log = tk.Text(lwrap, bg=BG, fg=MUTED, font=FONT_MONO, relief="flat",
                            height=6, wrap="word", highlightthickness=1,
                            highlightbackground=BORDER, insertbackground=TEXT,
                            padx=10, pady=8)
@@ -932,6 +958,8 @@ class App(tk.Tk):
         if d and os.path.isdir(d):
             if os.name == "nt":
                 os.startfile(d)
+            elif MAC:
+                subprocess.Popen(["open", d])
             else:
                 subprocess.Popen(["xdg-open", d])
         else:

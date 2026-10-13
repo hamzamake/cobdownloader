@@ -21,6 +21,28 @@ which is the only honest way to see what a clean machine gets.
 Uninstalling leaves `%APPDATA%\CobDownloader\` alone unless you say otherwise,
 so your settings and any self-updated yt-dlp/ffmpeg survive a reinstall.
 
+### On a Mac
+
+There are two disk images, one per kind of Mac: `Cob Downloader (Apple
+Silicon).dmg` for M1 and newer, `Cob Downloader (Intel).dmg` for older ones
+(Apple menu -> About This Mac says which). Open it and drag the app onto Applications.
+Like the Windows build, everything it needs is inside.
+
+The app is not signed with a paid Apple Developer ID, so the first launch is
+blocked with "Apple could not verify...". Click Done, then open System Settings
+-> Privacy & Security, scroll down and click **Open Anyway**. That is needed
+only once. (Or, in Terminal: `xattr -dr com.apple.quarantine
+"/Applications/Cob Downloader.app"`.)
+
+Building needs a Mac: `bash build-mac.sh` produces the image for that Mac's CPU
+in `installer\`. Without a Mac, push the repo to GitHub and run **Build macOS**
+from the Actions tab - it builds both images on GitHub's Mac runners, and
+pushing a `v*` tag attaches them to that release.
+
+yt-dlp self-updates on a Mac exactly as on Windows. ffmpeg does not offer
+updates there - the build bundles a recent static ffmpeg, which rarely matters.
+Settings live in `~/Library/Application Support/CobDownloader/`.
+
 ## Run it from source
 
 ```
@@ -78,7 +100,9 @@ Neither is needed for most other sites.
 `cob_downloader.py --check` (or `"Cob Downloader.exe" --check`) writes a report
 saying which yt-dlp, ffmpeg and JS runtime it found, and whether it can reach
 YouTube. The packaged build saves its settings and that report in
-`%APPDATA%\CobDownloader\`.
+`%APPDATA%\CobDownloader\` (on a Mac, `~/Library/Application
+Support/CobDownloader/`; run it as `"/Applications/Cob
+Downloader.app/Contents/MacOS/Cob Downloader" --check`).
 
 ## Licence
 

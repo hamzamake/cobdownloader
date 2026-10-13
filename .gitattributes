@@ -5,3 +5,7 @@
 
 *.exe binary
 *.ico binary
+
+# bash refuses CRLF scripts ($'\r': command not found)
+*.sh text eol=lf
+*.dmg binary
