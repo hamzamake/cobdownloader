@@ -1,0 +1,57 @@
+# Builds the macOS disk images on GitHub's Mac runners, so no Mac is needed.
+# Actions tab -> "Build macOS" -> Run workflow, then download the two .dmg
+# files from the run's Artifacts.  Pushing a v* tag also builds them and
+# attaches them to that tag's GitHub Release.
+name: Build macOS
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write          # only used to attach the .dmg to a tag's release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # PyInstaller builds for the CPU it runs on, hence one job each.
+          # GitHub retires its last Intel image (macos-15-intel) in fall 2027
+          - runner: macos-15
+            label: apple-silicon
+          - runner: macos-15-intel
+            label: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Build
+        run: bash build-mac.sh
+        env:
+          PYTHON: python
+
+      - name: Show self check
+        if: always()
+        run: cat "$HOME/Library/Application Support/CobDownloader/check-report.txt" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cob-downloader-mac-${{ matrix.label }}
+          path: installer/*.dmg
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes ""
+          gh release upload "$GITHUB_REF_NAME" installer/*.dmg --clobber
